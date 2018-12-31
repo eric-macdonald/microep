@@ -29,3 +29,9 @@ TARGET_LINK_LIBRARIES(direct_binding_tcp_show  irdirectsdk
                                                
 TARGET_LINK_LIBRARIES(direct_binding_usb_show  irdirectsdk udev
 				   	       ${OpenCV_LIBRARIES})
+
+install(TARGETS direct_binding_tcp_show DESTINATION /usr/local/bin)
+install(TARGETS direct_binding_usb_show DESTINATION /usr/local/bin)
+install(TARGETS serializeRaw DESTINATION /usr/local/bin)
+install(TARGETS convertRaw2PPM DESTINATION /usr/local/bin)
+install(TARGETS checkRawFramerate DESTINATION /usr/local/bin)
