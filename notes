@@ -1,6 +1,39 @@
+# one time configuration on a system
+git config --global core.editor vim
+git config --global user.email "eric.w.macdonald@gmail.com"
+git config --global user.name "Eric MacDonald"
+git config --global color.ui auto
+
+# to verify
+git config --global user.name
+
+
+# to set up a repository
 echo "# microep" >> README.md
 git init
+#repeat this for every file to be watched
 git add README.md
+
+#Perform the next two commands to update to new version
 git commit -m "first commit"
 git remote add origin https://github.com/eric-macdonald/microep.git
+
+# to do this you will need to generate a token from github,
+# 	settings
+#	developers settings
+# 	personal token for your computer
+#	Use token as password
 git push -u origin master
+
+
+
+
+git config credential.helper store
+git push http://example.com/repo.git
+Username: <type your username>
+password
+
+git remote show origin
+
+pull before push to synchronize
+
