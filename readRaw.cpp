@@ -1,4 +1,7 @@
 #include <iostream>
+#include <typeinfo>
+#include <regex>
+#include <type_traits>
 #include <fstream>
 #include "opencv2/highgui.hpp"
 #include "opencv2/imgproc.hpp"
@@ -9,21 +12,33 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <string.h>
+#include <chrono>
+#include <ctime>
 #include <sys/time.h>
 #include <opencv2/opencv.hpp>
+                       
 
 using namespace std;
 using namespace cv;
+using namespace std::chrono;
+
+std::chrono::system_clock::time_point makeTimePoint (int year, int mon, int day, int hour, int min, int sec=0);
+std::string asString (const std::chrono::system_clock::time_point& tp);
+
+std::chrono::system_clock::time_point frametime;
 
 int main(int argc, char *argv[])
 {
       int              w = 642;
       int              h = 480;
+
       short            value;
       int              long_frame_count = 0;
       int              frame_start;
       int              frame_end;
       int              frame_size = w * h;
+   
+
       char           * file_buffer;
       unsigned short * frame_buffer;
       frame_buffer = new unsigned short [frame_size];
@@ -50,41 +65,61 @@ int main(int argc, char *argv[])
           } 
 
       std::string line;
+      std::string timeline;
       std::ifstream filelist(argv[1]);
       if (filelist.is_open()) {
 
            while (getline(filelist, line)) {
-                 printf("%s", line.c_str());
-               
+                 string timestring = line.c_str();
+                 regex r("\\s*ir_(\\d+)_(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2}).*"); 
+                 smatch m;
+                 if(regex_match(timestring,m,r)) 
+                     {
+                       std::string ts = m[2] + "" + m[3] + "" + m[4] + "T" + m[5] + "" + m[6] + "" + m[7];
+                       frametime =  makeTimePoint (stoi(m[2]), stoi(m[3]), stoi(m[4]), stoi(m[5]), stoi(m[6]), stoi(m[7]));
+                    } 
+                       else 
+                     {
+                       cout << "File list is corrupted " <<  endl;
+                       return -1;
+                     }
                  std::string suffixraw = ".raw";
                  std::string suffixtime = ".time";
                  std::string fileraw  = line.c_str() + suffixraw;
                  std::string filetime = line.c_str() + suffixtime;
                  std::string timestamp = line.c_str();
-                 cout << "***********************************" << endl;
-                 cout << "input time file name =  " << filetime << endl;
-                 cout << "input raw file name =   " << fileraw << endl ;
                
                  int number_of_frames = 0;
                  std::string line;
                  std::ifstream timefile(filetime);
                
-///////////////// open the raw file
                  long size;
                  ifstream rawfile (fileraw, ios::in|ios::binary|ios::ate);
 
-///////////////// determine raw file size for one buffer capture of all 
                  size = rawfile.tellg();
                  rawfile.seekg (0, ios::beg);
-                 cout << "file size = " << size << endl << endl << endl;
+
+                 cout << endl << endl << "***********************************" << endl;
+                 cout << "input time file name =  " << filetime << endl;
+                 cout << "input raw file name =   " << fileraw << endl ;
+                 cout << "Timestamp " << asString(frametime) << endl;
+                 cout << "file size = " << size << endl ;
 
                  file_buffer = new char [size];
-                 cout << "new file_buffer of size " << size << endl;
                  rawfile.read (file_buffer, size);
                  int i = 0;
-                 while (std::getline(timefile, line))
+                 while (std::getline(timefile, timeline))
                       {
-                      cout << "frame = " << long_frame_count << endl;
+                      string timestring = timeline.c_str();
+                      regex r("^\\s*(\\d+)\\.(\\d{3}).*"); 
+                      smatch m;
+                      if(regex_match(timestring,m,r)) 
+                          {
+                          cout << m[1] << "." << m[2] << endl;   
+                          }
+                      else 
+                         cout << "Error reading time file " << endl;
+
                       if(i == 0)
                          {
                          frame_start = 48; 
@@ -117,11 +152,10 @@ int main(int argc, char *argv[])
                       cv_img.convertTo(cv_img, CV_8UC1);
                       cv::equalizeHist(cv_img, cv_img2);
                       applyColorMap(cv_img, color, cv::COLORMAP_JET);
+                      string timetext;
+                      timetext = "Frame " + std::to_string(long_frame_count) + " " + asString(frametime);
+                      putText(color, timetext, Point(25, 25), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
               
-//////////            cout << "cv_img r, c = " << cv_img2.rows << " " << cv_img2.cols <<endl;
-//////////            cout << "cv_img channels and size =" << cv_img2.channels() << " " << cv_img2.size() <<endl;
-//////////            cout << "Matrix 3 type = " << cv_img2.type() << endl;
-               
                       cv::imshow("image", color);
                       cv::waitKey(1);
                       writer.write(color);
@@ -131,15 +165,40 @@ int main(int argc, char *argv[])
                  rawfile.close();
                  timefile.close();
 
-                 cout << "about to delete file buffer " << endl;
                  delete[] file_buffer;
-                 cout << "deleted file buffer " << endl;
                  }
         }
-     cout << "started to delete with frame_buffer" << endl;
+     cout << "Created csv file with all extracted features" << endl;
+     cout << "Deleting all buffers and files" << endl;
      delete[] frame_buffer;
-     cout << "ended deletion of frame_buffer" << endl;
      featuresfile.close();
      filelist.close();
      return 0;
+}
+
+
+std::string asString (const std::chrono::system_clock::time_point& tp)
+{
+   // convert to system time:
+   std::time_t t = std::chrono::system_clock::to_time_t(tp);
+   std::string ts = ctime(&t);   // convert to calendar time
+   ts.resize(ts.size()-1);       // skip trailing newline
+   return ts;
+}
+
+std::chrono::system_clock::time_point makeTimePoint (int year, int mon, int day, int hour, int min, int sec)
+{
+   struct std::tm t;
+   t.tm_sec = sec;        // second of minute (0 .. 59 and 60 for leap seconds)
+   t.tm_min = min;        // minute of hour (0 .. 59)
+   t.tm_hour = hour;      // hour of day (0 .. 23)
+   t.tm_mday = day;       // day of month (0 .. 31)
+   t.tm_mon = mon-1;      // month of year (0 .. 11)
+   t.tm_year = year-1900; // year since 1900
+   t.tm_isdst = -1;       // determine whether daylight saving time
+   std::time_t tt = std::mktime(&t);
+   if (tt == -1) {
+       throw "no valid system time";
+   }
+   return std::chrono::system_clock::from_time_t(tt);
 }
