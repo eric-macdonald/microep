@@ -1,5 +1,3 @@
-#include <iostream>
-#include <typeinfo>
 #include <regex>
 #include <type_traits>
 #include <fstream>
@@ -25,14 +23,17 @@ using namespace std::chrono;
 std::chrono::system_clock::time_point makeTimePoint (int year, int mon, int day, int hour, int min, int sec=0);
 std::string asString (const std::chrono::system_clock::time_point& tp);
 
+Rect Rec(2, 0, 640, 480);
 std::chrono::system_clock::time_point firsttime;
 std::chrono::system_clock::time_point frametime;
 int elapsed_time;
 
 int main(int argc, char *argv[])
 {
-    if(argc != 2) {
-      cout << "Usage: readRaw <video_filebase>" << endl << endl;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
+    if(!((argc==2)||(argc==4))) {
+      cout << "Usage: readRaw <video_filebase> <scale> <offset>" << endl << endl;
       cout << "   For a directory full of raw and time files, " << endl;
       cout << "   use the filename base as the argument.      " << endl;
       cout << "   An example is for ir_14060049_20190124_183213.time and" << endl;
@@ -40,16 +41,34 @@ int main(int argc, char *argv[])
       cout << "   Invoke:                          " << endl;
       cout << "   readRaw ir_14060049_20190124_183213 " << endl << endl << endl;
       cout << "   This will work for any number of files with integer suffixes " << endl << endl << endl;
+      return -1;
       }
+ 
+    float scaler = 0.33;
+    float mult   = -150;
+    if(argc==4) 
+             {
+             float scaler = stof(argv[2]);
+             float mult   = stof(argv[3]);
+             cout << "reading scaler and mult factor " << std::endl;
+             }
+     
 
       int              w = 642;
       int              h = 480;
+      int              outw = 640;
+      int              outh = 480;
+
 
       std::string      line;
       std::string      timeline;
       std::string      timestring;
       std::string      inputstring = argv[1];
-      short            value;
+      unsigned short   value;
+      unsigned short   value_fake;
+      unsigned short   old_value = 0;
+      unsigned char    lsb;
+      unsigned char    msb;
       int              base_seconds;
       int              long_frame_count = 0;
       int              frame_start;
@@ -61,41 +80,7 @@ int main(int argc, char *argv[])
       char           * file_buffer;
       unsigned short * frame_buffer;
       frame_buffer = new unsigned short [frame_size];
-      unsigned short   kvalue;
 
-
-///////////////////////////////////////////////////////////////////
-      VideoWriter writer;
-      int codec = CV_FOURCC('M', 'J', 'P', 'G'); 
-      double fps = 4.0;                          
-      bool   isColor = true;
-      string videofile = "./output.avi";            
-      writer.open(videofile, codec, fps, cv::Size(w,h), isColor);
-
-      if (!writer.isOpened()) 
-            {
-            cerr << "Could not open the output video file for write\n";
-            return -1;
-            }
-      else 
-            {
-            cerr << "Opened output video file for write\n";
-            } 
-         
-
-///////////////////////////////////////////////////////////////////
-      ofstream featuresfile;
-      featuresfile.open("./featuresfile.txt");
-
-      if (!featuresfile.is_open()) 
-            {
-            cerr << "Could not open text feature file for write\n";
-            return -1;
-            }
-      else 
-            {
-            cerr << "Opened feature file for write\n";
-            }
 
 ///////////////////////////////////////////////////////////////////
       regex r("\\s*ir_(\\d+)_(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2}).*"); 
@@ -111,6 +96,38 @@ int main(int argc, char *argv[])
             cerr << "File format does not contain the timestamp " <<  endl;
             return -1;
           }
+
+///////////////////////////////////////////////////////////////////
+      VideoWriter writer;
+      int codec = CV_FOURCC('M', 'J', 'P', 'G'); 
+      double fps = 4.0;                          
+      bool   isColor = true;
+      string videofile = inputstring + ".avi";            
+      writer.open(videofile, codec, fps, cv::Size(outw,outh), isColor);
+
+      if (!writer.isOpened()) 
+            {
+            cerr << "Could not open the output video file for write\n";
+            return -1;
+            }
+      else 
+            {
+            cerr << "Opened output video file for write\n";
+            } 
+
+///////////////////////////////////////////////////////////////////
+      ofstream featuresfile;
+      featuresfile.open(inputstring + ".txt");
+
+      if (!featuresfile.is_open()) 
+            {
+            cerr << "Could not open text feature file for write\n";
+            return -1;
+            }
+      else 
+            {
+            cerr << "Opened feature file for write\n";
+            }
 
 ///////////////////////////////////////////////////////////////////
       std::string    timefile_string = inputstring + std::string(".time");
@@ -200,42 +217,70 @@ int main(int argc, char *argv[])
                   frame_end = ((2*(i+1)*frame_size) + 48 + (i+1) * 80); 
                   }
               int z = 0;
-              int minval = 10000;
+              int minval = 900;
               int maxval = 0;
               for(int k = frame_start; k < frame_end; k = k + 2)
                   {
-                  value = (short(file_buffer[k+1])*256 + short(file_buffer[k]));
-                  if(value > 30000)   // no raw temperature should be this high
+                       
+                  lsb = (unsigned char)(file_buffer[k]);
+                  msb = (unsigned char)(file_buffer[k+1]);
+                  value = (unsigned short)msb*256 + (unsigned short)lsb;
+                  //cout << "Raw = " << std::hex << (unsigned short)msb << "  " << (unsigned short)lsb << std::dec << "  " << value;   
+                  value = (value-1000)/10;
+//                  if(value < 0)
+//                      {
+//                      value = old_value;
+//                      //std::cout << " below zero " ;
+//                    }
+                  if(value > 900)
                       {
-                       value = 1000;
+                      value_fake = old_value;
+                      //std::cout << " above 900 ";
                       }
-                  if(value < 1000)   // no raw temperature should be this low
+                  old_value = value;
+                  //cout << " convert to " << value << " row " << z%642 << " col " << z/642 << std::endl; 
+                  if(minval > (unsigned short)value)
                       {
-                       value = 1000;
+                      minval = (unsigned short)value;
                       }
-                  value = (value-1000)/50;
-                  if(value > 3000)
-                      value = 90;
-                  if(minval > value)
-                      minval = value;
-                  if(maxval < value)
-                      maxval = value;
+                  if(maxval < (unsigned short)value)
+                      {
+                      maxval = (unsigned short)value;
+                      }
                   frame_buffer[z] = value;
                   z++;
                   }
+
               cv::Mat cv_img(cv::Size(w, h), CV_16UC1, &frame_buffer[0], cv::Mat::AUTO_STEP);
+              cv::Mat clean = cv_img(Rec);
+              cv::Size scv_img = cv_img.size();
+              cv::Size sclean = clean.size();
+              double high,low;
+              cv::Point wherehigh, wherelow;
+              cv::minMaxLoc(clean,&high,&low,&wherehigh,&wherelow);
               cv::Mat cv_img2;
-              featuresfile << cv_img.at<short>(240,240) <<","<<minval<<","<<maxval<<","<<long_frame_count<<", " << asString(frametime) << "," << line << endl; 
+              cv::Mat cv_img3;
               cv::Mat color;
-              cv_img.convertTo(cv_img, CV_8UC1);
-              cv::equalizeHist(cv_img, cv_img2);
-              applyColorMap(cv_img, color, cv::COLORMAP_JET);
+              clean.convertTo(cv_img2, CV_8UC1);
+              //clean.convertTo(cv_img2, CV_8UC1, 0.33, -150);
+              clean.convertTo(cv_img2, CV_8UC1, scaler, mult);
+              //cv::equalizeHist(cv_img2, cv_img3);
+              applyColorMap(cv_img2, color, cv::COLORMAP_JET);
               string timetext;
-              timetext = "Frame " + std::to_string(long_frame_count) + " " + asString(frametime);
-              putText(color, timetext, Point(25, 25), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
+              //left if we want an average of an roi 
+              //cv::Rect roi( roiVertexXCoordinate, roiVertexYCoordinate, roiWidth, roiHeight );
+              //cv::Mat image_roi = inputImage( roi );
+              cv::Scalar avgPixelIntensity = cv::mean( cv_img );
+              float average_pixel = avgPixelIntensity.val[0];
+              timetext = "Frame " + std::to_string(long_frame_count) + " " + asString(frametime) + " average = " + std::to_string(average_pixel);
+              std::cout << "Frame " << long_frame_count << " stats: " << high << " " << low << " " << wherehigh << " " << wherelow << " " << average_pixel << std::endl;   
+              featuresfile <<  asString(frametime) << long_frame_count << " stats: " << high << " " << low << " " << wherehigh << " " << wherelow << " " << average_pixel << std::endl;
+              putText(color, timetext, Point(25, 25), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
             
               cv::imshow("image", color);
               cv::waitKey(1);
+              cv::Size scv_img2 = cv_img2.size();
+              cv::Size scv_img3 = cv_img3.size();
               writer.write(color);
               long_frame_count = long_frame_count + 1;
               i = i + 1;
@@ -252,6 +297,11 @@ int main(int argc, char *argv[])
           if (!timefile.is_open()) 
                 {
                 cout << "Could not open subsequent time file for read " << timefile_string << endl; 
+                high_resolution_clock::time_point t2 = high_resolution_clock::now();
+                auto duration = duration_cast<microseconds>( t2 - t1 ).count();
+                std::cout << long_frame_count << " frames required " << duration/1000000.f << " seconds to process." << std::endl;
+                cout << "Created text file with all extracted features" << endl;
+                cout << "Deleting all buffers and files" << endl;
                 return -1;
                 }
           else 
@@ -264,7 +314,7 @@ int main(int argc, char *argv[])
           rawfile.open(rawfile_string, ios::in|ios::binary|ios::ate);
           if (!rawfile.is_open()) 
                 {
-                cout << "Could not open subsequent raw feature file" << rawfile_string << endl;
+                cout << "Next subsequent raw file does not exist so completing video" << rawfile_string << endl;
                 return -1;
                 }
           else 
@@ -272,8 +322,14 @@ int main(int argc, char *argv[])
                 cout << "Opened subsequent raw file " << rawfile_string << endl << endl;
                 }
           }
-     cout << "Created csv file with all extracted features" << endl;
+     high_resolution_clock::time_point t2 = high_resolution_clock::now();
+     auto duration = duration_cast<microseconds>( t2 - t1 ).count();
+     std::cout << long_frame_count << "frames required " << duration << "to process." << std::endl;
+     cout << "Created text file with all extracted features" << endl;
      cout << "Deleting all buffers and files" << endl;
+
+
+
      delete[] frame_buffer;
      featuresfile.close();
      return 0;
@@ -305,3 +361,4 @@ std::chrono::system_clock::time_point makeTimePoint (int year, int mon, int day,
    }
    return std::chrono::system_clock::from_time_t(tt);
 }
+//              featuresfile << cv_img.at<short>(240,240) <<"\t"<< ((unsigned int)cv_img2.at<char>(240,240)&0xFF) <<"\t"<< ((unsigned int)cv_img3.at<char>(240,240)&0xFF) <<"\t " << ((unsigned int)color.at<char>(240,240)&0xFF) << "\t" << minval << "\t" << maxval <<"\t"<< long_frame_count << "\t " << asString(frametime) << endl;

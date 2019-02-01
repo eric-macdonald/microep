@@ -32,9 +32,9 @@ void sigHandler(int dummy=0)
 
 int main (int argc, char* argv[])
 {
-  if(argc!=2)
+  if(argc!=3)
   {
-    cout << "usage: " << argv[0] << " <xml configuration file>" << endl;
+    cout << "usage: " << argv[0] << " <xml configuration file> <save directory>" << endl;
     return -1;
   }
 
@@ -69,7 +69,7 @@ int main (int argc, char* argv[])
           RawdataHeader header;
           imager.initRawdataHeader(header);
 
-          IRFileWriter writer(time(NULL), "/tmp", header);
+          IRFileWriter writer(time(NULL), argv[2], header);
           writer.open();
 
           char nmea[GPSBUFFERSIZE];
@@ -86,7 +86,7 @@ int main (int argc, char* argv[])
 
               if(writer.canDoWriteOperations())
                 writer.write(timestamp, bufferRaw, chunk, dev->getRawBufferSize(), nmea);
-
+              std::cout << "frames = " << serializedImages << std::endl; 
               // In order to avoid too large files, the user can split the records into chunks of equal size.
               // Here, a fixed number of images should be recorded to each chunk.
               if((++serializedImages)%1000==0)
