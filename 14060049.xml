@@ -15,7 +15,7 @@
     <max>250</max>
   </temperature>
   <optics_text></optics_text>
-  <framerate>30.0</framerate>             <!-- scaled down frame rate, must be less or equal than camera frame rate -->
+  <framerate>32.0</framerate>             <!-- scaled down frame rate, must be less or equal than camera frame rate -->
   <bispectral>0</bispectral>              <!-- 0=only thermal sensor, 1=bispectral technology (only PI200/PI230) -->
   <average>0</average>                    <!-- average callback frames over intermediate frames -->
   <autoflag>
